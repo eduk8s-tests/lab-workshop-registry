@@ -1,25 +1,118 @@
 apiVersion: training.eduk8s.io/v1alpha2
 kind: Workshop
 metadata:
-  name: lab-markdown-sample
+  name: lab-workshop-registry
 spec:
-  title: Markdown Sample
-  description: A sample workshop using Markdown
-  vendor: eduk8s.io
-  difficulty: beginner
-  duration: 15m
-  url: https://github.com/eduk8s/lab-markdown-sample
+  title: Workshop Registry
+  description: Example of workshop environment registry.
+  url: https://github.com/eduk8s-tests/lab-workshop-registry
   content:
-    #image: quay.io/eduk8s/lab-markdown-sample:master
-    files: github.com/eduk8s/lab-markdown-sample
+    files: github.com/eduk8s-tests/lab-workshop-registry
   session:
-    namespaces:
-      budget: small
     applications:
       terminal:
         enabled: true
         layout: split
-      console:
-        enabled: true
-      editor:
-        enabled: true
+  environment:
+    objects:
+    - apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: "$(workshop_namespace)-registry"
+      spec:
+        selector:
+          matchLabels:
+            app: "$(workshop_namespace)-registry"
+        template:
+          metadata:
+            labels:
+              app: "$(workshop_namespace)-registry"
+          spec:
+            containers:
+            - name: "registry"
+              image: "registry.hub.docker.com/library/registry:2.7.1"
+              imagePullPolicy: "IfNotPresent"
+              resources:
+                limits:
+                  memory: "768Mi"
+              ports:
+              - containerPort: 5000
+                protocol: "TCP"
+              env:
+              - name: "REGISTRY_STORAGE_DELETE_ENABLED"
+                value: "true"
+              - name: "REGISTRY_AUTH"
+                value: "htpasswd"
+              - name: "REGISTRY_AUTH_HTPASSWD_REALM"
+                value: "Workshop Image Registry"
+              - name: "REGISTRY_AUTH_HTPASSWD_PATH"
+                value: "/auth/htpasswd"
+              volumeMounts":
+              - name: "data"
+                mountPath: "/var/lib/registry"
+              - name: "auth"
+                mountPath: "/auth"
+            securityContext:
+              # We don't have access to Educates storage_group so set
+              # some things that may work anyway.
+              runAsUser: 405
+              runAsGroup: 100
+              fsGroup: 100
+              supplementalGroups:
+              - 1
+            volumes:
+            - name: "name"
+              persistentVolumeClaim:
+                claimName: "$(workshop_namespace)-registry"
+            - name: "auth"
+              configMap:
+                name: "$(workshop_namespace)-registry"
+                items:
+                - key: "htpasswd"
+                  path: "htpasswd"
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: "$(workshop_namespace)-registry"
+      spec:
+        resources:
+          requests:
+            storage: "10Gi"
+        accessModes:
+        - "ReadWriteOnce"
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: "$(workshop_namespace)-registry"
+      data:
+        htpasswd: "registry:$apr1$7ZoUx4EB$hMSLjgdqOGnBnqbYmrnAj1"
+    - apiVersion: v1
+      kind: Service
+      metadata:
+        name: "$(workshop_namespace)-registry"
+      spec:
+        selector:
+          app: "$(workshop_namespace)-registry"
+        ports:
+        - port: 5000
+          targetPort: 5000
+    - apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: "$(workshop_namespace)-registry"
+      spec:
+        rules:
+        - host: "$(workshop_namespace)-registry.$(ingress_domain)"
+          http:
+            paths:
+            - pathType: Prefix
+              path: "/"
+              backend:
+                service:
+                  name: "$(workshop_namespace)-registry"
+                  port: 
+                    number: 5000
+        tls:
+        - hosts:
+          - "$(workshop_namespace)-registry.$(ingress_domain)"
+          secretName: "$(ingress_secret)"

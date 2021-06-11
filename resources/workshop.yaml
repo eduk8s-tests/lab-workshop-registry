@@ -47,7 +47,7 @@ spec:
                 value: "Workshop Image Registry"
               - name: "REGISTRY_AUTH_HTPASSWD_PATH"
                 value: "/auth/htpasswd"
-              volumeMounts":
+              volumeMounts:
               - name: "data"
                 mountPath: "/var/lib/registry"
               - name: "auth"
@@ -61,7 +61,7 @@ spec:
               supplementalGroups:
               - 1
             volumes:
-            - name: "name"
+            - name: "data"
               persistentVolumeClaim:
                 claimName: "$(workshop_namespace)-registry"
             - name: "auth"
